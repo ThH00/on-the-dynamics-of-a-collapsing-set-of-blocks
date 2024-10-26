@@ -1,0 +1,6 @@
+outputs
+list-contact-states.py
+inputs_ changing_blocks_number.txt
+inputs_varying_amplitude.txt
+inputs_varying_friction.txt
+inputs_varying_iteration_number.txt
