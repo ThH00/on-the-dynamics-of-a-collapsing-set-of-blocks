@@ -1,7 +1,5 @@
-% specify folder constaining simulations
+% Specify the folder containing the simulations.
 mainFolder = 
-% Example usage:
-% mainFolder = 'G:\My Drive\Research\08-Stability of Stacked Objects\Code-2024-02\stacked-blocks-2d\outputs\final-bifurcation-figure-n6_k1_omega4.7124_mu.3_n_osc3_iters_per_osc60';
 
 runFunctionInSubfolders(mainFolder);
 
