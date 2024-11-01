@@ -23,6 +23,8 @@ def parse_args():
 
 n, k, ang_frq, mu_val, n_oscillations, iters_per_oscillation, output_path = parse_args()
 
+############################
+# the following 7 lines are for debugging purposes only. 
 # n = 5
 # k = 1
 # ang_frq = 0.785398163397448
@@ -30,6 +32,50 @@ n, k, ang_frq, mu_val, n_oscillations, iters_per_oscillation, output_path = pars
 # n_oscillations = 37.5
 # iters_per_oscillation = 100
 # output_path = "G:\\My Drive\\Research\\08-Stability of Stacked Objects\\Code-2024-02\\stacked-blocks-2d\\outputs\\debugging"
+############################
+
+# Notes
+# - In this simulation, if failure is detected, the total number of oscillations will be decreased.
+#   Failure is defined to occur when any two blocks in the stack loose contact. 
+
+# Define failure to occur when any two consecutive blocks loose contact.
+# If you would like to stop solving for the motion of the stack beyond the timestep
+# when failure is detected, set the 'reduce_ntime_if_fail = 1'. Otherwise set
+# 'reduce_ntime_if_fail = 0'.
+# The solution is stopped by reducing ntime to the iteration when failure is detected.
+reduce_ntime_if_fail = 1
+
+# Specify the maximum duration in hours for one run 
+max_hours = 10
+
+# Specify the maximum number of leaves beyond which the code will stop running
+max_leaves = 20
+
+# creating custom exceptions
+class MaxNewtonIterAttainedError(Exception):
+    """This exception is raised when the maximum number of Newton iterations is attained
+      whilst the iterations have not yet converged and the solution was not yet obtained."""
+    def __init__(self, message="This exception is raised when the maximum number of Newton iterations is attained."):
+        self.message = message
+        super().__init__(self.message)
+
+class RhoInfInfiniteLoop(Exception):
+    """This exception is raised when we have possibly entered in an infinite loop through updating rho_inf."""
+    def __init__(self, message="This exception is raised when we have possibly entered in an infinite loop through updating rho_inf."):
+        self.message = message
+        super().__init__(self.message)
+
+class MaxHoursAttained(Exception):
+    """This exception is raised when the maximum number of run hours specified by the use is exceeded."""
+    def __init__(self, message="This exception is raised when the maximum run time is exceeded."):
+        self.message = message
+        super().__init__(self.message)
+
+class MaxLeavesAttained(Exception):
+    """This exception is raised when the maximum number of run leaves specified by the use is exceeded."""
+    def __init__(self, message="This exception is raised when the maximum number of leaves is exceeded."):
+        self.message = message
+        super().__init__(self.message)
 
 # f is an output file that logs failed runs
 # it is saved in the directory containing the output file
@@ -47,7 +93,6 @@ t_nd = np.sqrt(l_nd/a_nd)   # s, time nondimensionalization parameter
 
 # quantites following this line are nondimensional
 
-# n = 8                       # number of blocks [input]
 # the motion of the first block is prescribed (acts like a base plate)
 ndof = 3*(n-1)              # total number of degress of freedom
 gr = 9.81/a_nd              # gravitational acceleration
@@ -55,44 +100,44 @@ gr = 9.81/a_nd              # gravitational acceleration
 # block dimensions
 m = np.ones(n)/m_nd         # block mass
 w = 0.2*np.ones(n)/l_nd     # block width
-w[0] = 1/l_nd
+w[0] = 1/l_nd               # bottom block width is increases
 h = 0.4*np.ones(n) /l_nd    # block height
-h[0] = 0.2/l_nd
-mu = mu_val*np.ones(n)         # friction coefficient
+h[0] = 0.2/l_nd             # bottom block height is decreases
+mu = mu_val*np.ones(n)      # friction coefficient, the same for all contact interfaces
 
 # parameters of oscillation motion of bottom block
-a = k*w[1]                              # amplitude
+a = k*w[1]                  # amplitude
 
 # simulation (time) parameters
 # period of one oscillation in sec/cylcle
-oscillation_period = 2*np.pi/ang_frq    # sec/oscillation
-tf = n_oscillations*oscillation_period
-dtime = oscillation_period/iters_per_oscillation
-ntime = math.ceil(n_oscillations*iters_per_oscillation)
-ntime_init = ntime
+oscillation_period = 2*np.pi/ang_frq                    # time per oscillation
+tf = n_oscillations*oscillation_period                  # final time, simulation duration
+dtime = oscillation_period/iters_per_oscillation        # duration of iteration
+ntime = math.ceil(n_oscillations*iters_per_oscillation) # number of iterations
+ntime_init = ntime  # saving the initial number of iterations to be completed, ntime can change
 t = np.linspace(0,tf,ntime)          # time array
 
-# motion of bottom block
+# motion of bottom block (bb)
 xbb = a*np.sin(ang_frq*t)
 xbbdot = a*ang_frq*np.cos(ang_frq*t)
 xbbddot = -a*(ang_frq**2)*np.sin(ang_frq*t)
 
-g.write(f"Period of oscillation: {oscillation_period} sec/cycle.\n")
-g.write(f"Total duration of simulation: {tf} sec.\n\n")
+g.write(f"Period of oscillation: {oscillation_period} time/cycle.\n")
+g.write(f"Total duration of simulation: {tf}.\n\n")
 
 # constraint count
-ng = 0
-ngamma = 0
-nN = 2*(n-1)
-nF = n-1
-nX = 3*ndof+3*ng+3*ngamma+3*nN+2*nF
+ng = 0          # number of constraints at position level
+ngamma = 0      # number of constraints at velocity level
+nN = 2*(n-1)    # number of gap distance constraints
+nF = n-1        # number of friction constraints
+nX = 3*ndof+3*ng+3*ngamma+3*nN+2*nF     # total number of constraints with their derivative
 
 # fixed basis vectors
 Ex = np.array([1,0])
 Ey = np.array([0,1])
 
 # generalized alpha parameters
-MAXITERn = 20           # maximum number of newton iterations
+MAXITERn = 20
 r = 0.3
 rho_inf = 0.5
 rho_infinity_initial = rho_inf
@@ -129,22 +174,27 @@ def remove_last_line(file_path):
 def get_gN(q,u,a):
     """Calculate the normal contact constraint"""
 
-    q_copy = q
+    # saving position, velocity, and acceleration coordinates of stack (without the bottom block)
+    q_copy = q 
     u_copy = u
     a_copy = a
 
+    # position, velocity, and acceleration coordinates of the bottom block
     qbb = np.array([xbb[iter],h[0]/2,0])
     ubb = np.array([xbbdot[iter],0,0])
     abb = np.array([xbbddot[iter],0,0])
     
+    # combining the position, velocity, and acceleration coordinates of all the stack
     q = np.concatenate((qbb,q),axis=None)
     u = np.concatenate((ubb,u),axis=None)
     a = np.concatenate((abb,a),axis=None)
 
+    # divide coordinates components
     x, y, theta = get_xyt(q)
     xdot, ydot, thetadot = get_xyt(u)
     xddot, yddot, thetaddot = get_xyt(a)
 
+    # initializing the corotational vectors and their derivatives
     ex = np.zeros((n,2))
     ey = np.zeros((n,2))
     
@@ -154,10 +204,12 @@ def get_gN(q,u,a):
     exddot = np.zeros((n,2))
     eyddot = np.zeros((n,2))
     
+    # initializing the position, velocity, and acceleration vectors to the center of mass of each block
     r = np.zeros((n,2))
     v = np.zeros((n,2))
     a = np.zeros((n,2))
 
+    # initializing the position, velocity, and acceleration vectors to each of the 4 corners
     ra = np.zeros((n,2))
     rb = np.zeros((n,2))
     rc = np.zeros((n,2))
@@ -202,6 +254,8 @@ def get_gN(q,u,a):
         ac[i,:] = a[i,:]-w[i]/2*exddot[i,:]-h[i]/2*eyddot[i,:]
         ad[i,:] = a[i,:]+w[i]/2*exddot[i,:]-h[i]/2*eyddot[i,:]
 
+    # intializing the gap distances and slip speeds measured from each 
+    # corner (4 per contact interface) and their derivatives and gradients
     gNa = np.zeros(n)
     gNb = np.zeros(n)
     gNc = np.zeros(n)
@@ -231,6 +285,7 @@ def get_gN(q,u,a):
     gNddot = np.zeros(nN)
     WN = np.zeros((nN,3*n))
 
+    # an array to keep track of the gap distance selection at each contact interface
     corners = np.zeros(nN,dtype=np.int8)
 
     for i in range(1,n):
@@ -269,6 +324,8 @@ def get_gN(q,u,a):
         gammaFdot_allcases[i,2] = np.dot(va[i-1,:]-vc[i,:],exdot[i-1,:])+np.dot(aa[i-1,:]-ac[i,:],ex[i-1,:])    # c
         gammaFdot_allcases[i,3] = np.dot(va[i-1,:]-vd[i,:],exdot[i-1,:])+np.dot(aa[i-1,:]-ad[i,:],ex[i-1,:])    # d
 
+        # selecting the appropriate gap distance constraints for the left and right of each block
+        # the selection is saved in the corners array
         if np.dot(rb[i-1,:]-rd[i,:],ex[i,:])>0 or np.dot(ra[i-1,:]-rc[i,:],ex[i,:])<0:
             # complete horizontal detachement
             corners[2*(i-1)] = 4
@@ -303,8 +360,8 @@ def get_gN(q,u,a):
                 WN[2*(i-1)+1,:] = dgNd_dq[i,:]
                 corners[2*(i-1)+1] = 3
           
-
-    WN = np.transpose(WN[:,3:3*n])    # Remove derivatives wrt coordinates of first block
+    # Remove derivatives wrt coordinates of first block
+    WN = np.transpose(WN[:,3:3*n])    
 
     q = q_copy
     u = u_copy
@@ -372,6 +429,7 @@ def get_R(X,prev_X,prev_AV,prev_q,prev_u,prev_gNdot,prev_gammaF,*index_sets):
         C = np.zeros((nN))
 
         for i in range(nN):
+            # check for contact if blocks are not horizontally detached
             if corners[i] != 4 and r*gN[i] - Kappa_hat_N[i] <=0:
                 A[i] = 1
                 if r*ksiN[i]-PN[i] <= 0:
@@ -385,6 +443,7 @@ def get_R(X,prev_X,prev_AV,prev_q,prev_u,prev_gNdot,prev_gammaF,*index_sets):
         D = index_sets[3]
         E = index_sets[4]
 
+        # if the blocks got horizontally detached, update the contact regions accordinly
         flag_slip_check = False
 
         for i in range(nN):
@@ -410,6 +469,7 @@ def get_R(X,prev_X,prev_AV,prev_q,prev_u,prev_gNdot,prev_gammaF,*index_sets):
             WF[:,i] = np.transpose(dgammaF_dq_allcases[i+1,corners[2*i],3:3*n])
         else:
             # the second contact is closed (A[2*i+1] == 1) OR both contacts are open
+            # if the contact is open, the following values do not matter
             gammaF[i] = gammaF_allcases[i+1,corners[2*i+1]%4]
             gammaFdot[i] = gammaFdot_allcases[i+1,corners[2*i+1]%4]
             WF[:,i] = np.transpose(dgammaF_dq_allcases[i+1,corners[2*i+1]%4,3:3*n])
@@ -432,7 +492,8 @@ def get_R(X,prev_X,prev_AV,prev_q,prev_u,prev_gNdot,prev_gammaF,*index_sets):
                     if np.abs(r*gammaFdot[i]-lambdaF[i])<=mu[i+1]*(lambdaN[2*i]+lambdaN[2*i+1]):
                         # E-stick
                         E[i] = 1
-                
+
+    # calculating contact residual            
     R_LambdaN = np.zeros(nN)
     R_lambdaN = np.zeros(nN)
     R_KappaN = np.zeros(nN)
@@ -486,6 +547,7 @@ def get_R(X,prev_X,prev_AV,prev_q,prev_u,prev_gNdot,prev_gammaF,*index_sets):
     R = np.concatenate([Rs, Rc],axis=None)
 
     if index_sets == ():
+        # in this case, get_R is called to calculate the actual residual, not as part of calculating the Jacobian
         print(f"A={A}")
         print(f"B={B}")
         print(f"C={C}")
@@ -494,6 +556,7 @@ def get_R(X,prev_X,prev_AV,prev_q,prev_u,prev_gNdot,prev_gammaF,*index_sets):
         corners_save[leaves_counter,:,iter] = corners
         return R, AV, q, u, gNdot, gammaF, A, B, C, D, E
     else:
+        # in this case, get_R is called as part of calculating the Jacobian for fixed contact regions
         return R, AV, q, u, gNdot, gammaF
 
 def get_R_J(X,prev_X,prev_AV,prev_q,prev_u,prev_gNdot,prev_gammaF,*fixed_contact):
@@ -504,6 +567,7 @@ def get_R_J(X,prev_X,prev_AV,prev_q,prev_u,prev_gNdot,prev_gammaF,*fixed_contact
     fixed_contact_regions = False
 
     if fixed_contact != ():
+        # here, the contact is fixed if a solve_bifurcation is being run
         fixed_contact = fixed_contact[0]
         fixed_contact_regions = True
         A = fixed_contact[0:nN]
@@ -535,6 +599,7 @@ def get_R_J(X,prev_X,prev_AV,prev_q,prev_u,prev_gNdot,prev_gammaF,*fixed_contact
     if fixed_contact_regions:
         return R, AV, q, u, gNdot, gammaF, J
     else:
+        # return the contact regions 'contacts_nu' to be saved in case they are needed (in the case of unconverged iterations)
         return R, AV, q, u, gNdot, gammaF, J, contacts_nu
 
 def update(prev_X,prev_AV,prev_q,prev_u,prev_gNdot,prev_gammaF,*fixed_contact):
@@ -545,6 +610,8 @@ def update(prev_X,prev_AV,prev_q,prev_u,prev_gNdot,prev_gammaF,*fixed_contact):
     X = prev_X
     
     if fixed_contact != ():
+        # the contact region is fixed if solve_bifuration is calling update 
+        # the fixed_contact data is inputted into get_R_J
         fixed_contact = fixed_contact[0]
         fixed_contact_regions = True
     else:
@@ -576,13 +643,14 @@ def update(prev_X,prev_AV,prev_q,prev_u,prev_gNdot,prev_gammaF,*fixed_contact):
             print(f"norm(R) = {norm_R}")
         if nu == MAXITERn:
             print(f"No Convergence for nu = {nu} at rho_inf = {rho_inf}")
-            raise TimeoutError
+            raise MaxNewtonIterAttainedError
         
-        if 4 in corners_save:
-            f.write(f"ntime changed from {ntime} to {iter}")
-            ntime = iter
+        if reduce_ntime_if_fail == 1:   # if we ask to stop code after failure is detected
+            if 4 in corners_save:       # if faulre is detected
+                f.write(f"ntime changed from {ntime} to {iter}.\n")
+                ntime = iter
 
-    except TimeoutError as e:
+    except MaxNewtonIterAttainedError as e:
         if fixed_contact_regions is False:
             # if unique contact regions were already determined, don't recalculate them
             unique_contacts = np.unique(contacts, axis=0)
@@ -592,12 +660,14 @@ def update(prev_X,prev_AV,prev_q,prev_u,prev_gNdot,prev_gammaF,*fixed_contact):
             return unique_contacts, do_not_unpack
         return 
     except np.linalg.LinAlgError as e:
+        # the Jacobian matrix is singular, not invertable
         print(e)
         # increment rho_inf        
         update_rho_inf()
         # calling function recursively
         update(prev_X,prev_AV,prev_q,prev_u,prev_gNdot,prev_gammaF,fixed_contact)
     except Exception as e:
+        # any other exception
         raise e
     
     return X,AV,q,u,gNdot,gammaF
@@ -608,7 +678,7 @@ def update_rho_inf():
     print(rho_inf)
     if np.abs(rho_inf - rho_infinity_initial) < 0.001:
         print("possibility of infinite loop")
-        raise Exception
+        raise RhoInfInfiniteLoop
     if rho_inf > 1.001:
         rho_inf = 0
     # eq. 72
@@ -684,14 +754,16 @@ def solve(iter_start):
         print(f"iteration {iter}")
 
         current_time = time.time()
-        if current_time-start_time>(3600*4):
-            f.write('Program quit because max execution time 4 hours was exceeded.')
-            raise Exception
+        if current_time-start_time>(3600*max_hours):
+            f.write(f'Program quit because max execution time {max_hours} hours was exceeded.')
+            raise MaxLeavesAttained
+            # instead set ntime = iter to reduce ntime instead of directly quitting program
 
         # f.write(f'Iteration {iter}\n') 
 
         try:
             X,AV,q,u,gNdot,gammaF = update(prev_X,prev_AV,prev_q,prev_u,prev_gNdot,prev_gammaF)
+            # this line will return a value error if the MaxNewtonIterAttainedError exception was handeled in update
 
             prev_X = X
             prev_AV = AV
@@ -713,12 +785,6 @@ def solve(iter_start):
             solve_bifurcation(iter,unique_contacts)
             increment_leaves = False
             break   # this break is important 
-        except RuntimeWarning:
-            if iters_per_oscillation<160:
-                iters_per_oscillation = iters_per_oscillation+10
-                f.write(f'iters_per_oscillation incremented to {iters_per_oscillation}\n')
-            else:
-                raise Exception
         except Exception as e:
             # f.write(f'Bifurcation branch did not pan out for leaf {leaves_counter} at {iter}\n') 
             raise e
@@ -738,8 +804,8 @@ def solve(iter_start):
         # f.write(f'leaves counter incremented to leaf {leaves_counter}\n')
         print(f'leaves_counter = {leaves_counter}')
 
-        if leaves_counter>20:
-            f.write('Program quit because max number of leaves 50 was exceeded.')
+        if leaves_counter>max_leaves:
+            f.write(f'Program quit because max number of leaves that is {max_leaves} was exceeded.\n')
             raise Exception
 
     return

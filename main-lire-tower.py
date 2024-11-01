@@ -1,14 +1,25 @@
 import numpy as np
-import math
 import time
-import os
-import argparse
 
 start_time = time.time()
 
 n = 5
 mu_val = .3
 output_path = "G:\\My Drive\\Research\\08-Stability of Stacked Objects\\Code-2024-02\\stacked-blocks-2d\\outputs\\max-overhang-new"
+
+# creating custom exceptions
+class MaxNewtonIterAttainedError(Exception):
+    """This exception is raised when the maximum number of Newton iterations is attained
+      whilst the iterations have not yet converged and the solution was not yet obtained."""
+    def __init__(self, message="This exception is raised when the maximum number of Newton iterations is attained."):
+        self.message = message
+        super().__init__(self.message)
+
+class RhoInfInfiniteLoop(Exception):
+    """This exception is raised when we have possibly entered in an infinite loop through updating rho_inf."""
+    def __init__(self, message="This exception is raised when we have possibly entered in an infinite loop through updating rho_inf."):
+        self.message = message
+        super().__init__(self.message)
 
 # nondimensionalization parameters
 l_nd = 1                    # m, length nondimensionalization paramter
@@ -23,9 +34,9 @@ gr = 9.81/a_nd              # gravitational acceleration
 
 # block dimensions
 m = np.ones(n)/m_nd         # block mass
-w = 1*np.ones(n)/l_nd     # block width
+w = 1*np.ones(n)/l_nd       # block width
 h = 0.2*np.ones(n) /l_nd    # block height
-mu = mu_val*np.ones(n)         # friction coefficient
+mu = mu_val*np.ones(n)      # friction coefficient
 
 dtime = 0.01
 ntime = 1000
@@ -506,6 +517,8 @@ def update(prev_X,prev_AV,prev_q,prev_u,prev_gNdot,prev_gammaF,*fixed_contact):
     X = prev_X
     
     if fixed_contact != ():
+        # the contact region is fixed if solve_bifuration is calling update 
+        # the fixed_contact data is inputted into get_R_J
         fixed_contact = fixed_contact[0]
         fixed_contact_regions = True
     else:
@@ -537,9 +550,9 @@ def update(prev_X,prev_AV,prev_q,prev_u,prev_gNdot,prev_gammaF,*fixed_contact):
             print(f"norm(R) = {norm_R}")
         if nu == MAXITERn:
             print(f"No Convergence for nu = {nu} at rho_inf = {rho_inf}")
-            raise TimeoutError
+            raise MaxNewtonIterAttainedError
 
-    except TimeoutError as e:
+    except MaxNewtonIterAttainedError as e:
         if fixed_contact_regions is False:
             # if unique contact regions were already determined, don't recalculate them
             unique_contacts = np.unique(contacts, axis=0)
@@ -565,7 +578,7 @@ def update_rho_inf():
     print(rho_inf)
     if np.abs(rho_inf - rho_infinity_initial) < 0.001:
         print("possibility of infinite loop")
-        raise Exception
+        raise RhoInfInfiniteLoop
     if rho_inf > 1.001:
         rho_inf = 0
     # eq. 72
@@ -634,12 +647,9 @@ def solve(iter_start):
     for iter in range(iter_start,ntime):
         print(f"iteration {iter}")
 
-        current_time = time.time()
-        if current_time-start_time>1800:
-            raise Exception
-
         try:
             X,AV,q,u,gNdot,gammaF = update(prev_X,prev_AV,prev_q,prev_u,prev_gNdot,prev_gammaF)
+            # this line will return a value error if the MaxNewtonIterAttainedError exception was handeled in update
 
             prev_X = X
             prev_AV = AV

@@ -231,7 +231,7 @@ function runFunctionInSubfolders(mainFolder)
         subfolder = fullfile(mainFolder, folders(i).name);
         cd(subfolder); % Change current directory to the subfolder
             fig_title = extractBetween(folders(i).name,"outputs","_mu");
-            get_bifurcation_analysis(folders(i).name); % Run the function
+            get_bifurcation_analysis(fig_title); % Run the function
 
     end
 end

@@ -9,6 +9,8 @@ figure()
 hold on
 box on
 plot(fail_array(:,1),1./fail_array(:,2),'linewidth',2);
+xlabel('$\omega$','Interpreter','latex')
+ylabel('$1/{text{number of iterations to fail}}$','Interpreter','latex')
 
 figure()
 hold on
@@ -16,11 +18,8 @@ dtime = 2*pi/100./fail_array(:,1);
 fail_array(:,3) = fail_array(:,2).*dtime;
 box on
 plot(fail_array(:,1),1./fail_array(:,3),'linewidth',2);
-
-figure()
-hold on
-box on
-plot(fail_array_total(:,1),1./fail_array_total(:,3),'linewidth',2);
+xlabel('$\omega$','Interpreter','latex')
+ylabel('$\frac{1}{t_F}$')
 
 
 load('corners.mat')

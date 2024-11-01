@@ -216,6 +216,15 @@ end
 % Main script
 function runFunctionInSubfolders(mainFolder)
     % List all folders and subfolders
-    cd(mainFolder); % Change current directory
-    get_bifurcation_analysis('fig'); % Run the function
+    folders = dir(mainFolder);
+    folders = folders([folders.isdir]);
+    folders = folders(~ismember({folders.name}, {'.', '..'}));
+    
+    % Iterate over each subfolder
+    for i = 1:numel(folders)
+        subfolder = fullfile(mainFolder, folders(i).name);
+        cd(subfolder); % Change current directory to the subfolder
+            fig_title = extractBetween(folders(i).name,"outputs","_mu");
+            get_bifurcation_analysis(fig_title); % Run the function
+    end
 end
