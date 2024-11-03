@@ -3,35 +3,36 @@ import math
 import time
 import os
 import argparse
+import scipy.io
 
 start_time = time.time()
 
-# optaining certain parametric arguments from an input file
-def parse_args():
-    parser = argparse.ArgumentParser(description='Process some integers and floats.')
-    parser.add_argument('n', type=int, help='Number of blocks (integer)')
-    parser.add_argument('k', type=float, help='Oscillations amplitude = k*block_width(float)')
-    parser.add_argument('ang_frq', type=float, help='Angular velocity of oscillations (float)')
-    parser.add_argument('mu_val', type=float, help='coefficient of friction (float)')
-    parser.add_argument('n_oscillations', type=float, default = 5, help='Number of oscillations to simulate (float)')
-    parser.add_argument('iters_per_oscillation', type=float, default = 35, help='Number of iterations per oscillations (float)')
-    parser.add_argument('--output_path', '-o', type=str, help='Output path (optional)')
+# # optaining certain parametric arguments from an input file
+# def parse_args():
+#     parser = argparse.ArgumentParser(description='Process some integers and floats.')
+#     parser.add_argument('n', type=int, help='Number of blocks (integer)')
+#     parser.add_argument('k', type=float, help='Oscillations amplitude = k*block_width(float)')
+#     parser.add_argument('ang_frq', type=float, help='Angular velocity of oscillations (float)')
+#     parser.add_argument('mu_val', type=float, help='coefficient of friction (float)')
+#     parser.add_argument('n_oscillations', type=float, default = 5, help='Number of oscillations to simulate (float)')
+#     parser.add_argument('iters_per_oscillation', type=float, default = 35, help='Number of iterations per oscillations (float)')
+#     parser.add_argument('--output_path', '-o', type=str, help='Output path (optional)')
     
-    args = parser.parse_args()
+#     args = parser.parse_args()
     
-    return args.n, args.k, args.ang_frq, args.mu_val, args.n_oscillations, args.iters_per_oscillation, args.output_path
+#     return args.n, args.k, args.ang_frq, args.mu_val, args.n_oscillations, args.iters_per_oscillation, args.output_path
 
-n, k, ang_frq, mu_val, n_oscillations, iters_per_oscillation, output_path = parse_args()
+# n, k, ang_frq, mu_val, n_oscillations, iters_per_oscillation, output_path = parse_args()
 
 ############################
 # the following 7 lines are for debugging purposes only. 
-# n = 5
-# k = 1
-# ang_frq = 0.785398163397448
-# mu_val = 0.2
-# n_oscillations = 37.5
-# iters_per_oscillation = 100
-# output_path = "G:\\My Drive\\Research\\08-Stability of Stacked Objects\\Code-2024-02\\stacked-blocks-2d\\outputs\\debugging"
+n = 6
+k = 1
+ang_frq = 01.5707
+mu_val = 0.3
+n_oscillations = 3
+iters_per_oscillation = 100
+output_path = "/Users/theresahonein/Desktop/blocks-duplicate-repo/original-on-the-dynamics-of-a-collapsing-set-of-blocks/outputs/debug"
 ############################
 
 # Notes
@@ -43,13 +44,13 @@ n, k, ang_frq, mu_val, n_oscillations, iters_per_oscillation, output_path = pars
 # when failure is detected, set the 'reduce_ntime_if_fail = 1'. Otherwise set
 # 'reduce_ntime_if_fail = 0'.
 # The solution is stopped by reducing ntime to the iteration when failure is detected.
-reduce_ntime_if_fail = 1
+reduce_ntime_if_fail = 0
 
 # Specify the maximum duration in hours for one run 
-max_hours = 10
+max_hours = 50
 
 # Specify the maximum number of leaves beyond which the code will stop running
-max_leaves = 20
+max_leaves = 10000
 
 # creating custom exceptions
 class MaxNewtonIterAttainedError(Exception):
@@ -424,9 +425,9 @@ def get_R(X,prev_X,prev_AV,prev_q,prev_u,prev_gNdot,prev_gammaF,*index_sets):
     WF = np.zeros((ndof,nF))
     
     if index_sets == ():
-        A = np.zeros((nN))
-        B = np.zeros((nN))
-        C = np.zeros((nN))
+        A = np.zeros(nN, dtype=int)
+        B = np.zeros(nN, dtype=int)
+        C = np.zeros(nN, dtype=int)
 
         for i in range(nN):
             # check for contact if blocks are not horizontally detached
@@ -480,8 +481,8 @@ def get_R(X,prev_X,prev_AV,prev_q,prev_u,prev_gNdot,prev_gammaF,*index_sets):
     PF = LambdaF+dtime*((1-gama)*prev_lambdaFbar+gama*lambdaFbar)
 
     if index_sets == ():
-        D = np.zeros(nF)
-        E = np.zeros(nF)
+        D = np.zeros(nF, dtype=int)
+        E = np.zeros(nF, dtype=int)
 
         for i in range(nF):
             if A[2*i] == 1 or A[2*i+1] == 1:
@@ -628,7 +629,7 @@ def update(prev_X,prev_AV,prev_q,prev_u,prev_gNdot,prev_gammaF,*fixed_contact):
         print(f"nu = {nu}")
         print(f"norm(R) = {norm_R}")
 
-        while np.abs(np.linalg.norm(R,np.inf))>10**(-10) and nu<MAXITERn:
+        while np.abs(np.linalg.norm(R,np.inf))>10**(-8) and nu<MAXITERn:
             # Newton Update
             X = X-np.linalg.solve(J,R)
             # Calculate new EOM and residual
@@ -646,7 +647,7 @@ def update(prev_X,prev_AV,prev_q,prev_u,prev_gNdot,prev_gammaF,*fixed_contact):
             raise MaxNewtonIterAttainedError
         
         if reduce_ntime_if_fail == 1:   # if we ask to stop code after failure is detected
-            if 4 in corners_save:       # if faulre is detected
+            if 4 in corners_save:       # if failure is detected
                 f.write(f"ntime changed from {ntime} to {iter}.\n")
                 ntime = iter
 
@@ -716,6 +717,18 @@ def get_xyt(q):
 
 def increment_saved_arrays():
     global q_save, u_save, X_save, gNdot_save, gammaF_save, AV_save, corners_save
+    
+    # save current arrays to file
+    block0 = np.stack((xbb,h[0]/2*np.ones((ntime_init)),np.zeros((ntime_init))))
+    block0_tiled = np.tile(block0,(np.shape(q_save)[0],1,1))
+    q_save_total = np.concatenate((block0_tiled,q_save),axis=1)
+
+    file_name = str(f'{output_path}/q.mat')
+    scipy.io.savemat(file_name,dict(q=q_save_total))
+    file_name_corners = str(f'{output_path}/corners.mat')
+    scipy.io.savemat(file_name_corners,dict(corners=corners_save))
+
+    # increment saved arrays
     q_save_addition = np.tile(q_save[leaves_counter,:,:],(1,1,1))
     q_save = np.vstack((q_save,q_save_addition))
     u_save_addition = np.tile(u_save[leaves_counter,:,:],(1,1,1))
@@ -735,6 +748,7 @@ def solve(iter_start):
     global q_save, u_save, X_save, gNdot_save, gammaF_save, AV_save, corners_save
     global leaves_counter
     global iter
+    global rho_infinity_initial, rho_inf
 
     fixed_contact_regions = False
     increment_leaves = True
@@ -778,6 +792,10 @@ def solve(iter_start):
             gNdot_save[leaves_counter,:,iter] = prev_gNdot
             gammaF_save[leaves_counter,:,iter] = prev_gammaF
             AV_save[leaves_counter,:,iter] = prev_AV
+
+            # reset initial value
+            rho_infinity_initial = rho_inf 
+
         except ValueError as e:
             unique_contacts,_ = update(prev_X,prev_AV,prev_q,prev_u,prev_gNdot,prev_gammaF)
             # f.write(f'Detected a bifurcation at leaf {leaves_counter} at iter {iter}\n')
@@ -797,7 +815,7 @@ def solve(iter_start):
         
         increment_saved_arrays()
 
-        q_save_shape = np.shape(q_save)
+        # q_save_shape = np.shape(q_save)
         # f.write(f'The shape of q_save was incremented to {q_save_shape}\n')
 
         leaves_counter = leaves_counter + 1
@@ -863,7 +881,7 @@ def solve_bifurcation(iter_bif,*fixed_contact_region_params):
 
             # f.write(f'{k}-th unique contact convergence successfull\n')            
 
-            solve(iter_bif+1)   
+            solve(iter_bif+1)
 
         except TypeError as e:       
             # make a provision for if we always passed and never converged.
@@ -887,7 +905,7 @@ def solve_bifurcation(iter_bif,*fixed_contact_region_params):
                         solve_bifurcation(iter_bif,unique_contacts)
                     except:
                         # we cannot update rho_inf anymore
-                        # we need to abandon this leaf
+                        # we need to abandon this leaf  
                         g.write(f'bifurcation convergence failed\n')
                         pass
                 # solve_bifurcation(iter_bif,unique_contacts) # maybe wrong, remove
@@ -1000,7 +1018,7 @@ finally:
     block0_tiled = np.tile(block0,(np.shape(q_save)[0],1,1))
     q_save_total = np.concatenate((block0_tiled,q_save),axis=1)
 
-    import scipy.io
+    
     file_name = str(f'{output_path}/q.mat')
     scipy.io.savemat(file_name,dict(q=q_save_total))
     file_name_corners = str(f'{output_path}/corners.mat')
