@@ -30,7 +30,7 @@ n = 6
 k = 1
 ang_frq = 5.4979
 mu_val = 0.3
-n_oscillations = 10
+n_oscillations = 8.75
 iters_per_oscillation = 200
 output_path = "/Users/theresahonein/Desktop/blocks-duplicate-repo/original-on-the-dynamics-of-a-collapsing-set-of-blocks/outputs/debug"
 # ############################
@@ -719,12 +719,7 @@ def get_xyt(q):
 
 bif_tracker = np.array([0])
 
-def increment_saved_arrays(leaf):
-    global q_save, u_save, X_save, gNdot_save, gammaF_save, AV_save, corners_save
-    global bif_tracker
-
-    bif_tracker = np.vstack((bif_tracker,np.array([iter])))
-    
+def save_arrays():
     # save current arrays to file
     block0 = np.stack((xbb,h[0]/2*np.ones((ntime_init)),np.zeros((ntime_init))))
     block0_tiled = np.tile(block0,(np.shape(q_save)[0],1,1))
@@ -734,6 +729,14 @@ def increment_saved_arrays(leaf):
     scipy.io.savemat(file_name,dict(q=q_save_total))
     file_name_corners = str(f'{output_path}/corners.mat')
     scipy.io.savemat(file_name_corners,dict(corners=corners_save))
+
+def increment_saved_arrays(leaf):
+    global q_save, u_save, X_save, gNdot_save, gammaF_save, AV_save, corners_save
+    global bif_tracker
+
+    bif_tracker = np.vstack((bif_tracker,np.array([iter])))
+
+    save_arrays()
 
     # increment saved arrays
     q_save_addition = np.tile(q_save[leaf,:,:],(1,1,1))
@@ -752,7 +755,7 @@ def increment_saved_arrays(leaf):
     corners_save = np.vstack((corners_save,corners_save_addition))
 
 
-def solve_new(iter_start):
+def solve_new(leaf,iter_start):
     global q_save, u_save, X_save, gNdot_save, gammaF_save, AV_save, corners_save
     global rho_infinity_initial, rho_inf, MAXITERn, MAXITERn_initial
     global iter, total_leaves
@@ -769,11 +772,10 @@ def solve_new(iter_start):
             f.write(f'Program quit because max execution time {max_hours} hours was exceeded.')
             raise MaxLeavesAttained
 
-        while leaf < total_leaves:
-            print(f"leaf {leaf}")
+        current_total_leaves = total_leaves
 
-            if iter == 77 and leaf == 60:
-                print(iter)
+        while leaf < current_total_leaves:
+            print(f"leaf {leaf}")
 
             prev_X = X_save[leaf,:,iter-1]
             prev_AV = AV_save[leaf,:,iter-1]
@@ -803,13 +805,17 @@ def solve_new(iter_start):
                 leaf = leaf+1
 
             except ValueError as e:
-                leaf = solve_bifurcation(leaf,iter)
+                solve_bifurcation(leaf,iter)
+                leaf += 1
 
             except Exception as e:
                 # f.write(f'Bifurcation branch did not pan out for leaf {leaves_counter} at {iter}\n') 
                 raise e
             
         iter = iter+1
+
+        if iter%10 == 0:
+            save_arrays()
 
 
     return
@@ -827,16 +833,21 @@ def solve_bifurcation(leaf,iter):
     prev_gNdot = gNdot_save[leaf,:,iter-1]
     prev_gammaF = gammaF_save[leaf,:,iter-1]
 
-    arrays_incremented = False
-
     unique_contacts,_ = update(prev_X,prev_AV,prev_q,prev_u,prev_gNdot,prev_gammaF)
 
     n_unique_contacts = np.shape(unique_contacts)[0]
     nonconvergence_counter = 0 # number of nonconverged branches out of unique_contacts
+    num_converged_leaves = 0
     for k in range(n_unique_contacts):
         try:
             fixed_contact  = unique_contacts[k,:]
             X,AV,q,u,gNdot,gammaF = update(prev_X,prev_AV,prev_q,prev_u,prev_gNdot,prev_gammaF,fixed_contact)
+            num_converged_leaves +=1
+
+            if num_converged_leaves > 1:
+                increment_saved_arrays(leaf)
+                leaf = total_leaves # we are now on a new leaf that is the last leaf
+                total_leaves+=1
 
             q_save[leaf,:,iter] = q
             u_save[leaf,:,iter] = u
@@ -844,12 +855,6 @@ def solve_bifurcation(leaf,iter):
             gNdot_save[leaf,:,iter] = gNdot
             gammaF_save[leaf,:,iter] = gammaF
             AV_save[leaf,:,iter] = AV
-
-            # prepare space in q_save to accomodate another leaf
-            increment_saved_arrays(leaf)
-            arrays_incremented = True
-            total_leaves+=1
-            leaf+=1
 
             if total_leaves>max_leaves:
                 break
@@ -868,7 +873,7 @@ def solve_bifurcation(leaf,iter):
                 else:
                     try:
                         update_rho_inf()
-                        solve_bifurcation(leaf,iter)
+                        solve_new(leaf,iter)
                         break
                     except:
                         # we cannot update rho_inf anymore we need to abandon this leaf  
@@ -882,21 +887,11 @@ def solve_bifurcation(leaf,iter):
                         gammaF_save = np.delete(gammaF_save,leaf,0)
                         AV_save = np.delete(AV_save,leaf,0)
 
-    if arrays_incremented == True:
-        total_leaves-=1
-        # decrement saved arrays
-        q_save = np.delete(q_save,leaf,0)
-        u_save = np.delete(u_save,leaf,0)
-        X_save = np.delete(X_save,leaf,0)
-        gNdot_save = np.delete(gNdot_save,leaf,0)
-        gammaF_save = np.delete(gammaF_save,leaf,0)
-        AV_save = np.delete(AV_save,leaf,0)
-
     if leaves_counter>max_leaves:
         f.write(f'Program quit because max number of leaves that is {max_leaves} was exceeded.\n')
         raise MaxLeavesAttained
 
-    return leaf
+    return
 
 # initial normal force
 lambdaN0 = np.zeros(nN)
@@ -975,8 +970,9 @@ try:
     f.write(f"Period of oscillation: {oscillation_period} sec/cycle.\n")
     f.write(f"Total duration of simulation: {tf} sec.\n\n")
     iter_start = 1
+    leaf_start = 0
     total_leaves = 1
-    solve_new(iter_start)
+    solve_new(leaf_start,iter_start)
     # removing last added leaf_counter
     leaves_counter = leaves_counter-1
     # f.write(f'leaves_counter decremented to {leaves_counter}\n')
