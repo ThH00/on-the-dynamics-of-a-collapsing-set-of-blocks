@@ -378,9 +378,9 @@ def get_R(X,prev_X,prev_AV,prev_q,prev_u,prev_gNdot,prev_gammaF,*index_sets):
     WF = np.zeros((ndof,nF))
     
     if index_sets == ():
-        A = np.zeros((nN))
-        B = np.zeros((nN))
-        C = np.zeros((nN))
+        A = np.zeros(nN, dtype=int)
+        B = np.zeros(nN, dtype=int)
+        C = np.zeros(nN, dtype=int)
 
         for i in range(nN):
             if corners[i] != 4 and r*gN[i] - Kappa_hat_N[i] <=0:
@@ -431,8 +431,8 @@ def get_R(X,prev_X,prev_AV,prev_q,prev_u,prev_gNdot,prev_gammaF,*index_sets):
     PF = LambdaF+dtime*((1-gama)*prev_lambdaFbar+gama*lambdaFbar)
 
     if index_sets == ():
-        D = np.zeros(nF)
-        E = np.zeros(nF)
+        D = np.zeros(nF, dtype=int)
+        E = np.zeros(nF, dtype=int)
 
         for i in range(nF):
             if A[2*i] == 1 or A[2*i+1] == 1:
