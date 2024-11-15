@@ -24,16 +24,16 @@ start_time = time.time()
 
 # n, k, ang_frq, mu_val, n_oscillations, iters_per_oscillation, output_path = parse_args()
 
-# ############################
+# # ############################
 # the following 7 lines are for debugging purposes only. 
-n = 6
+n = 5
 k = 1
-ang_frq = 5.4979
+ang_frq = 09.4248
 mu_val = 0.3
-n_oscillations = 8.75
+n_oscillations = 150
 iters_per_oscillation = 200
 output_path = "/Users/theresahonein/Desktop/blocks-duplicate-repo/original-on-the-dynamics-of-a-collapsing-set-of-blocks/outputs/debug"
-# ############################
+# # ############################
 
 # Notes
 # - In this simulation, if failure is detected, the total number of oscillations will be decreased.
@@ -44,13 +44,13 @@ output_path = "/Users/theresahonein/Desktop/blocks-duplicate-repo/original-on-th
 # when failure is detected, set the 'reduce_ntime_if_fail = 1'. Otherwise set
 # 'reduce_ntime_if_fail = 0'.
 # The solution is stopped by reducing ntime to the iteration when failure is detected.
-reduce_ntime_if_fail = 0
+reduce_ntime_if_fail = 1
 
 # Specify the maximum duration in hours for one run 
-max_hours = 50
+max_hours = 5
 
-# Specify the maximum number of leaves beyond which the code will stop running
-max_leaves = 5
+# Specify the maximum number of leaves beyond which the code will stop running (actuall max leaves is max_leaves+1)
+max_leaves = 20
 
 # creating custom exceptions
 class MaxNewtonIterAttainedError(Exception):
@@ -75,6 +75,12 @@ class MaxHoursAttained(Exception):
 class MaxLeavesAttained(Exception):
     """This exception is raised when the maximum number of run leaves specified by the use is exceeded."""
     def __init__(self, message="This exception is raised when the maximum number of leaves is exceeded."):
+        self.message = message
+        super().__init__(self.message)
+
+class FailureDetected(Exception):
+    """This exception is raised when failure is detected if user chose to end the program when failure is detected."""
+    def __init__(self, message="This exception is raised when failure is detected if user chose it."):
         self.message = message
         super().__init__(self.message)
 
@@ -651,6 +657,7 @@ def update(prev_X,prev_AV,prev_q,prev_u,prev_gNdot,prev_gammaF,*fixed_contact):
             if 4 in corners_save:       # if failure is detected
                 f.write(f"ntime changed from {ntime} to {iter}.\n")
                 ntime = iter
+                raise FailureDetected
 
     except MaxNewtonIterAttainedError as e:
         if fixed_contact_regions is False:
@@ -856,7 +863,7 @@ def solve_bifurcation(leaf,iter):
             gammaF_save[leaf,:,iter] = gammaF
             AV_save[leaf,:,iter] = AV
 
-            if total_leaves>max_leaves:
+            if total_leaves > max_leaves:
                 break
 
         except TypeError as e:
@@ -977,7 +984,7 @@ try:
     leaves_counter = leaves_counter-1
     # f.write(f'leaves_counter decremented to {leaves_counter}\n')
     # removing the last added block to q_save
-    q_save = q_save[0:np.shape(q_save)[0]-1,:,:]
+    # q_save = q_save[0:np.shape(q_save)[0]-1,:,:]
     # f.write(f'q_save decremented to {np.shape(q_save)}\n')
 except: 
     f.write(f"Failure at iteration {iter} while calculating leaf {leaves_counter}.\n")
