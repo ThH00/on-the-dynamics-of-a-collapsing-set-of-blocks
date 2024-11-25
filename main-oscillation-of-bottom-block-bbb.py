@@ -191,6 +191,22 @@ def remove_last_line(file_path):
     with open(file_path, 'w') as file:
         file.writelines(lines[:-1])
 
+def update_rho_inf():
+    global rho_inf, alpha_m, alpha_f, gama, beta, iter
+    rho_inf = rho_inf+0.05  #0.01
+    print(rho_inf)
+    if np.abs(rho_inf - rho_infinity_initial) < 0.001:
+        g.write("\n     rho_inf has been updated through a complete cycle.\n")
+        print(f"Iteration {iter}: possibility of infinite loop.\n")
+        raise RhoInfInfiniteLoop
+    if rho_inf > 1.001:
+        rho_inf = 0
+    # eq. 72
+    alpha_m = (2*rho_inf-1)/(rho_inf+1)
+    alpha_f = rho_inf/(rho_inf+1)
+    gama = 0.5+alpha_f-alpha_m
+    beta = 0.25*(0.5+gama)**2
+
 def get_gN(q,u,a):
     """Calculate the normal contact constraint"""
 
