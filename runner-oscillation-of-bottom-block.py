@@ -7,8 +7,8 @@ ARGS_NAMES = ['n', 'k', 'ang_freq', 'mu','n_osc', 'iters_per_osc']
 
 # Generate timestamp
 timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-outputs_dir = f"outputs/{timestamp}"
-source_file = "main-oscillation-of-bottom-block-copy.py"
+outputs_dir = f"outputs/frequency-experiment{timestamp}"
+source_file = "main-oscillation-of-bottom-block-ibi.py"
 input_file = "inputs_oscillation_of_bottom_block.txt"
 
 # Check if the input file exists

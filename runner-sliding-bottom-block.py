@@ -7,7 +7,7 @@ ARGS_NAMES = ['n', 'eN', 'ntime', 'vX0', 'mu']
 
 # Generate timestamp
 timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-outputs_dir = f"outputs/{timestamp}"
+outputs_dir = f"outputs/sliding-bottom-block{timestamp}"
 source_file = "main-sliding-bottom-block.py"
 input_file = "inputs-sliding-bottom-block.txt"
 

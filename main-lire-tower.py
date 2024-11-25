@@ -1,11 +1,13 @@
 import numpy as np
 import time
+import os
 
 start_time = time.time()
 
 n = 5
 mu_val = .3
-output_path = "G:\\My Drive\\Research\\08-Stability of Stacked Objects\\Code-2024-02\\stacked-blocks-2d\\outputs\\max-overhang-new"
+output_path = os.path.join(os.getcwd(), "outputs/lire-tower")
+os.makedirs(output_path, exist_ok=True)
 
 # creating custom exceptions
 class MaxNewtonIterAttainedError(Exception):

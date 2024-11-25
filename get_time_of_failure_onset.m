@@ -1,7 +1,6 @@
 % specify folder constaining simulations
-mainFolder = 
-% Example usage
-% mainFolder = 'Z:\chone\Desktop\theresa\stacked-blocks-2d\outputs\2024-06-04_13-43-21';
+currentFolder = pwd;
+mainFolder = [pwd,'/outputs/frequency-experiment*'] % COMPLETE FILE NAME WITH TIMESTAMP
 
 [fail_array] = runFunctionInSubfolders(mainFolder);
 fail_array = sortrows(fail_array);
@@ -14,7 +13,7 @@ ylabel('$1/{text{number of iterations to fail}}$','Interpreter','latex')
 
 figure()
 hold on
-dtime = 2*pi/100./fail_array(:,1);
+dtime = 2*pi/200./fail_array(:,1);
 fail_array(:,3) = fail_array(:,2).*dtime;
 box on
 plot(fail_array(:,1),1./fail_array(:,3),'linewidth',2);

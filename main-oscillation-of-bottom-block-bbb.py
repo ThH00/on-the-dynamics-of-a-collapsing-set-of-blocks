@@ -1,3 +1,5 @@
+# branch-by-branch-solution
+
 import numpy as np
 import math
 import time
@@ -7,7 +9,7 @@ import scipy.io
 
 start_time = time.time()
 
-# # optaining certain parametric arguments from an input file
+# optaining certain parametric arguments from an input file
 # def parse_args():
 #     parser = argparse.ArgumentParser(description='Process some integers and floats.')
 #     parser.add_argument('n', type=int, help='Number of blocks (integer)')
@@ -24,33 +26,29 @@ start_time = time.time()
 
 # n, k, ang_frq, mu_val, n_oscillations, iters_per_oscillation, output_path = parse_args()
 
-############################
-# the following 7 lines are for debugging purposes only. 
+# # # ############################
 n = 6
 k = 1
-ang_frq = 01.5707
+ang_frq = 5.4977
 mu_val = 0.3
-n_oscillations = 3
-iters_per_oscillation = 60
-output_path = "/Users/theresahonein/Desktop/blocks-duplicate-repo/original-on-the-dynamics-of-a-collapsing-set-of-blocks/outputs/debug"
-############################
-
-# Notes
-# - In this simulation, if failure is detected, the total number of oscillations will be decreased.
-#   Failure is defined to occur when any two blocks in the stack loose contact. 
+n_oscillations = 8
+iters_per_oscillation = 200
+output_path = os.path.join(os.getcwd(), "outputs/multiple_solutions")
+os.makedirs(output_path, exist_ok=True)
+# # # ############################
 
 # Define failure to occur when any two consecutive blocks loose contact.
 # If you would like to stop solving for the motion of the stack beyond the timestep
 # when failure is detected, set the 'reduce_ntime_if_fail = 1'. Otherwise set
 # 'reduce_ntime_if_fail = 0'.
 # The solution is stopped by reducing ntime to the iteration when failure is detected.
-reduce_ntime_if_fail = 0
+reduce_ntime_if_fail = 1
 
 # Specify the maximum duration in hours for one run 
 max_hours = 50
 
-# Specify the maximum number of leaves beyond which the code will stop running
-max_leaves = 10000
+# Specify the maximum number of leaves beyond which the code will stop running (actuall max leaves is max_leaves+1)
+max_leaves = 2
 
 # creating custom exceptions
 class MaxNewtonIterAttainedError(Exception):
@@ -78,12 +76,24 @@ class MaxLeavesAttained(Exception):
         self.message = message
         super().__init__(self.message)
 
+class FailureDetected(Exception):
+    """This exception is raised when failure is detected if user chose to end the program when failure is detected."""
+    def __init__(self, message="This exception is raised when failure is detected if user chose it."):
+        self.message = message
+        super().__init__(self.message)
+
+class NoBifurcationConvergence(Exception):
+    """This exception is raised when all leaves did not converge."""
+    def __init__(self, message="This exception is raised when all leaves did not converge."):
+        self.message = message
+        super().__init__(self.message)
+
 # f is an output file that logs failed runs
 # it is saved in the directory containing the output file
 directory_containing_output = os.path.dirname(output_path)
 f = open(f"{directory_containing_output}/run_failures_log.txt",'a')
 
-# g contains a sketch of the bifurcation map
+# g details the birth and death of multiple solutions
 g = open(f"{output_path}/bifurcation_map.txt",'w') 
 
 # nondimensionalization parameters
@@ -123,8 +133,16 @@ xbb = a*np.sin(ang_frq*t)
 xbbdot = a*ang_frq*np.cos(ang_frq*t)
 xbbddot = -a*(ang_frq**2)*np.sin(ang_frq*t)
 
-g.write(f"Period of oscillation: {oscillation_period} time/cycle.\n")
-g.write(f"Total duration of simulation: {tf}.\n\n")
+# n = 5
+# k = 1
+# ang_frq = 09.4248
+# mu_val = 0.3
+# n_oscillations = 150
+# iters_per_oscillation = 200
+
+g.write(f"######\n Running simulation with n = {n} blocks, angfre = {ang_frq}, mu = {mu_val} for {n_oscillations} oscillations with {iters_per_oscillation} iterations per oscillation.\n")
+g.write(f"    Period of oscillation: {oscillation_period} time/cycle.\n")
+g.write(f"    Total duration of simulation: {tf}.\n\n")
 
 # constraint count
 ng = 0          # number of constraints at position level
@@ -139,6 +157,7 @@ Ey = np.array([0,1])
 
 # generalized alpha parameters
 MAXITERn = 20
+MAXITERn_initial = MAXITERn
 r = 0.3
 rho_inf = 0.5
 rho_infinity_initial = rho_inf
@@ -370,9 +389,10 @@ def get_gN(q,u,a):
 
     return gN, gNdot, gNddot, WN, corners, gammaF_allcases, dgammaF_dq_allcases, gammaFdot_allcases
 
-def get_R(X,prev_X,prev_AV,prev_q,prev_u,prev_gNdot,prev_gammaF,*index_sets):
+
+def get_R(X,prev_X,prev_AV,prev_q,prev_u,prev_gNdot,prev_gammaF,leaf,*index_sets):
     """Calculates the residual"""
-    global corners_save, leaves_counter, iter, ntime
+    global corners_save, iter, ntime
 
     [prev_a,_,_,_,_,_,_,_,_,_,prev_lambdaN,_,prev_lambdaF] = get_X_components(prev_X)
     [a,U,Q,Kappa_g,Lambda_g,lambda_g,Lambda_gamma,lambda_gamma,
@@ -549,18 +569,18 @@ def get_R(X,prev_X,prev_AV,prev_q,prev_u,prev_gNdot,prev_gammaF,*index_sets):
 
     if index_sets == ():
         # in this case, get_R is called to calculate the actual residual, not as part of calculating the Jacobian
-        print(f"A={A}")
-        print(f"B={B}")
-        print(f"C={C}")
-        print(f"D={D}")
-        print(f"E={E}")
-        corners_save[leaves_counter,:,iter] = corners
+        # print(f"A={A}")
+        # print(f"B={B}")
+        # print(f"C={C}")
+        # print(f"D={D}")
+        # print(f"E={E}")
+        corners_save[leaf,:,iter] = corners
         return R, AV, q, u, gNdot, gammaF, A, B, C, D, E
     else:
         # in this case, get_R is called as part of calculating the Jacobian for fixed contact regions
         return R, AV, q, u, gNdot, gammaF
 
-def get_R_J(X,prev_X,prev_AV,prev_q,prev_u,prev_gNdot,prev_gammaF,*fixed_contact):
+def get_R_J(X,prev_X,prev_AV,prev_q,prev_u,prev_gNdot,prev_gammaF,leaf,*fixed_contact):
     global A_save, B_save, C_save, D_save, E_save
     global iter
 
@@ -576,9 +596,9 @@ def get_R_J(X,prev_X,prev_AV,prev_q,prev_u,prev_gNdot,prev_gammaF,*fixed_contact
         C = fixed_contact[2*nN:3*nN]
         D = fixed_contact[3*nN:3*nN+nF]
         E = fixed_contact[3*nN+nF:3*nN+2*nF]
-        R, AV, q, u, gNdot, gammaF =  get_R(X,prev_X,prev_AV,prev_q,prev_u,prev_gNdot,prev_gammaF, A, B, C, D, E)
+        R, AV, q, u, gNdot, gammaF =  get_R(X,prev_X,prev_AV,prev_q,prev_u,prev_gNdot,prev_gammaF,leaf,A, B, C, D, E)
     else:
-        R, AV, q, u, gNdot, gammaF, A, B, C, D, E = get_R(X,prev_X,prev_AV,prev_q,prev_u,prev_gNdot,prev_gammaF)
+        R, AV, q, u, gNdot, gammaF, A, B, C, D, E = get_R(X,prev_X,prev_AV,prev_q,prev_u,prev_gNdot,prev_gammaF,leaf)
         contacts_nu = np.concatenate((A,B,C,D,E),axis=None)
 
     # Initializing the Jacobian
@@ -593,8 +613,7 @@ def get_R_J(X,prev_X,prev_AV,prev_q,prev_u,prev_gNdot,prev_gammaF,*fixed_contact
 
     # Constructing the Jacobian column by column
     for i in range(nX):
-        # print(i)
-        R_plus_epsilon,_,_,_,_,_ = get_R(X+epsilon*I[:,i],prev_X,prev_AV,prev_q,prev_u,prev_gNdot,prev_gammaF, A, B, C, D, E)
+        R_plus_epsilon,_,_,_,_,_ = get_R(X+epsilon*I[:,i],prev_X,prev_AV,prev_q,prev_u,prev_gNdot,prev_gammaF,leaf, A, B, C, D, E)
         J[:,i] = (R_plus_epsilon-R)/epsilon
 
     if fixed_contact_regions:
@@ -603,9 +622,9 @@ def get_R_J(X,prev_X,prev_AV,prev_q,prev_u,prev_gNdot,prev_gammaF,*fixed_contact
         # return the contact regions 'contacts_nu' to be saved in case they are needed (in the case of unconverged iterations)
         return R, AV, q, u, gNdot, gammaF, J, contacts_nu
 
-def update(prev_X,prev_AV,prev_q,prev_u,prev_gNdot,prev_gammaF,*fixed_contact):
+def update(prev_X,prev_AV,prev_q,prev_u,prev_gNdot,prev_gammaF,leaf,*fixed_contact):
     """Takes components at time t and return values at time t+dt"""
-    global ntime
+    global ntime, iter
     
     nu = 0
     X = prev_X
@@ -620,36 +639,38 @@ def update(prev_X,prev_AV,prev_q,prev_u,prev_gNdot,prev_gammaF,*fixed_contact):
 
     try:
         if fixed_contact_regions == True:
-            R, AV, q, u, gNdot, gammaF, J = get_R_J(X,prev_X,prev_AV,prev_q,prev_u,prev_gNdot,prev_gammaF,fixed_contact)
+            R, AV, q, u, gNdot, gammaF, J = get_R_J(X,prev_X,prev_AV,prev_q,prev_u,prev_gNdot,prev_gammaF,leaf,fixed_contact)
         else:
-            R, AV, q, u, gNdot, gammaF, J, contacts_nu = get_R_J(X,prev_X,prev_AV,prev_q,prev_u,prev_gNdot,prev_gammaF)
+            R, AV, q, u, gNdot, gammaF, J, contacts_nu = get_R_J(X,prev_X,prev_AV,prev_q,prev_u,prev_gNdot,prev_gammaF,leaf)
             contacts = np.zeros((MAXITERn+1,3*nN+2*nF),dtype=int)
             contacts[nu,:] = contacts_nu
         norm_R = np.linalg.norm(R,np.inf)
-        print(f"nu = {nu}")
-        print(f"norm(R) = {norm_R}")
+        # print(f"nu = {nu}")
+        # print(f"norm(R) = {norm_R}")
 
-        while np.abs(np.linalg.norm(R,np.inf))>10**(-10) and nu<MAXITERn:
+        while np.abs(np.linalg.norm(R,np.inf))>(10**(-10)) and nu<MAXITERn:
             # Newton Update
             X = X-np.linalg.solve(J,R)
             # Calculate new EOM and residual
             nu = nu+1
             if fixed_contact_regions:
-                R, AV, q, u, gNdot, gammaF, J = get_R_J(X,prev_X,prev_AV,prev_q,prev_u,prev_gNdot,prev_gammaF,fixed_contact)
+                R, AV, q, u, gNdot, gammaF, J = get_R_J(X,prev_X,prev_AV,prev_q,prev_u,prev_gNdot,prev_gammaF,leaf,fixed_contact)
             else:
-                R, AV, q, u, gNdot, gammaF, J, contacts_nu = get_R_J(X,prev_X,prev_AV,prev_q,prev_u,prev_gNdot,prev_gammaF)
+                R, AV, q, u, gNdot, gammaF, J, contacts_nu = get_R_J(X,prev_X,prev_AV,prev_q,prev_u,prev_gNdot,prev_gammaF,leaf)
                 contacts[nu,:] = contacts_nu
             norm_R = np.linalg.norm(R,np.inf)
-            print(f"nu = {nu}")
-            print(f"norm(R) = {norm_R}")
+            # print(f"nu = {nu}")
+            # print(f"norm(R) = {norm_R}")
         if nu == MAXITERn:
-            print(f"No Convergence for nu = {nu} at rho_inf = {rho_inf}")
+            print(f"Iteration {iter} and leaf {leaf}:")
+            print(f"No Convergence for nu = {nu} at rho_inf = {rho_inf}\n")
             raise MaxNewtonIterAttainedError
         
         if reduce_ntime_if_fail == 1:   # if we ask to stop code after failure is detected
             if 4 in corners_save:       # if failure is detected
-                f.write(f"ntime changed from {ntime} to {iter}.\n")
+                f.write(f"    Failure was detected at iteration {iter}, so ntime changed from {ntime} to {iter}.\n")
                 ntime = iter
+                raise FailureDetected
 
     except MaxNewtonIterAttainedError as e:
         if fixed_contact_regions is False:
@@ -662,31 +683,18 @@ def update(prev_X,prev_AV,prev_q,prev_u,prev_gNdot,prev_gammaF,*fixed_contact):
         return 
     except np.linalg.LinAlgError as e:
         # the Jacobian matrix is singular, not invertable
-        print(e)
+        print(f"Error {e} at iteration {iter} and leaf {leaf}.")
         # increment rho_inf        
         update_rho_inf()
         # calling function recursively
-        update(prev_X,prev_AV,prev_q,prev_u,prev_gNdot,prev_gammaF,fixed_contact)
+        update(prev_X,prev_AV,prev_q,prev_u,prev_gNdot,prev_gammaF,leaf,fixed_contact)
     except Exception as e:
         # any other exception
+        g.write(f"\n    The exception {e} was raised during the calculation of some leaf at iteration {iter}.\n")
+        print(f"Error {e} at iteration {iter} and leaf {leaf}.\n")
         raise e
     
     return X,AV,q,u,gNdot,gammaF
-
-def update_rho_inf():
-    global rho_inf, alpha_m, alpha_f, gama, beta 
-    rho_inf = rho_inf+0.05  #0.01
-    print(rho_inf)
-    if np.abs(rho_inf - rho_infinity_initial) < 0.001:
-        print("possibility of infinite loop")
-        raise RhoInfInfiniteLoop
-    if rho_inf > 1.001:
-        rho_inf = 0
-    # eq. 72
-    alpha_m = (2*rho_inf-1)/(rho_inf+1)
-    alpha_f = rho_inf/(rho_inf+1)
-    gama = 0.5+alpha_f-alpha_m
-    beta = 0.25*(0.5+gama)**2
 
 def get_X_components(X):
     a = X[0:ndof]
@@ -715,9 +723,11 @@ def get_xyt(q):
         theta[i] = q[3*i+2]
     return x, y, theta
 
-def increment_saved_arrays():
-    global q_save, u_save, X_save, gNdot_save, gammaF_save, AV_save, corners_save
-    
+bif_tracker = np.array([0])
+
+def save_arrays():
+    global q_save, u_save, X_save, gNdot_save, gammaF_save, AV_save
+
     # save current arrays to file
     block0 = np.stack((xbb,h[0]/2*np.ones((ntime_init)),np.zeros((ntime_init))))
     block0_tiled = np.tile(block0,(np.shape(q_save)[0],1,1))
@@ -728,195 +738,184 @@ def increment_saved_arrays():
     file_name_corners = str(f'{output_path}/corners.mat')
     scipy.io.savemat(file_name_corners,dict(corners=corners_save))
 
-    # increment saved arrays
-    q_save_addition = np.tile(q_save[leaves_counter,:,:],(1,1,1))
-    q_save = np.vstack((q_save,q_save_addition))
-    u_save_addition = np.tile(u_save[leaves_counter,:,:],(1,1,1))
-    u_save = np.vstack((u_save,u_save_addition))
-    X_save_addition = np.tile(X_save[leaves_counter,:,:],(1,1,1))
-    X_save = np.vstack((X_save,X_save_addition))
-    gNdot_save_addition = np.tile(gNdot_save[leaves_counter,:,:],(1,1,1))
-    gNdot_save = np.vstack((gNdot_save,gNdot_save_addition))
-    gammaF_save_addition = np.tile(gammaF_save[leaves_counter,:,:],(1,1,1))
-    gammaF_save = np.vstack((gammaF_save,gammaF_save_addition))
-    AV_save_addition = np.tile(AV_save[leaves_counter,:,:],(1,1,1))
-    AV_save = np.vstack((AV_save,AV_save_addition))
-    corners_save_addition = np.tile(corners_save[leaves_counter,:,:],(1,1,1))
-    corners_save = np.vstack((corners_save,corners_save_addition))
-
-def solve(iter_start):
-    global q_save, u_save, X_save, gNdot_save, gammaF_save, AV_save, corners_save
-    global leaves_counter
-    global iter
-    global rho_infinity_initial, rho_inf
-
-    fixed_contact_regions = False
-    increment_leaves = True
-
-    # f.write(f'Running solve starting from iteration at leaf {leaves_counter}\n')
-    g.write(f'{iter_start}-')
-
-    prev_X = X_save[leaves_counter,:,iter_start-1]
-    prev_AV = AV_save[leaves_counter,:,iter_start-1]
-    prev_q = q_save[leaves_counter,:,iter_start-1]
-    prev_u = u_save[leaves_counter,:,iter_start-1]
-    prev_gNdot = gNdot_save[leaves_counter,:,iter_start-1]
-    prev_gammaF = gammaF_save[leaves_counter,:,iter_start-1]
-    iter = iter_start
-    # for iter in range(iter_start,ntime):
-    while iter<ntime:
-        print(f"iteration {iter}")
-
-        current_time = time.time()
-        if current_time-start_time>(3600*max_hours):
-            f.write(f'Program quit because max execution time {max_hours} hours was exceeded.')
-            raise MaxLeavesAttained
-            # instead set ntime = iter to reduce ntime instead of directly quitting program
-
-        # f.write(f'Iteration {iter}\n') 
-
-        try:
-            X,AV,q,u,gNdot,gammaF = update(prev_X,prev_AV,prev_q,prev_u,prev_gNdot,prev_gammaF)
-            # this line will return a value error if the MaxNewtonIterAttainedError exception was handeled in update
-
-            prev_X = X
-            prev_AV = AV
-            prev_q = q
-            prev_u = u
-            prev_gNdot = gNdot
-            prev_gammaF = gammaF
-
-            q_save[leaves_counter,:,iter] = prev_q
-            u_save[leaves_counter,:,iter] = prev_u
-            X_save[leaves_counter,:,iter] = prev_X
-            gNdot_save[leaves_counter,:,iter] = prev_gNdot
-            gammaF_save[leaves_counter,:,iter] = prev_gammaF
-            AV_save[leaves_counter,:,iter] = prev_AV
-
-            # reset initial value
-            rho_infinity_initial = rho_inf 
-
-        except ValueError as e:
-            unique_contacts,_ = update(prev_X,prev_AV,prev_q,prev_u,prev_gNdot,prev_gammaF)
-            # f.write(f'Detected a bifurcation at leaf {leaves_counter} at iter {iter}\n')
-            g.write(f'{iter}\n')
-            solve_bifurcation(iter,unique_contacts)
-            increment_leaves = False
-            break   # this break is important 
-        except Exception as e:
-            # f.write(f'Bifurcation branch did not pan out for leaf {leaves_counter} at {iter}\n') 
-            raise e
-
-        iter = iter+1
-
-    if increment_leaves == True:
-
-        g.write(f'end (leaf {leaves_counter})\n')
-        
-        increment_saved_arrays()
-
-        # q_save_shape = np.shape(q_save)
-        # f.write(f'The shape of q_save was incremented to {q_save_shape}\n')
-
-        leaves_counter = leaves_counter + 1
-        # f.write(f'leaves counter incremented to leaf {leaves_counter}\n')
-        print(f'leaves_counter = {leaves_counter}')
-
-        if leaves_counter>max_leaves:
-            f.write(f'Program quit because max number of leaves that is {max_leaves} was exceeded.\n')
-            raise Exception
+    np.save(f'{output_path}/q_save.npy', q_save)
+    np.save(f'{output_path}/u_save.npy', u_save)
+    np.save(f'{output_path}/X_save.npy', X_save)
+    np.save(f'{output_path}/gNdot_save.npy', gNdot_save)
+    np.save(f'{output_path}/gammaF_save.npy', gammaF_save)
+    np.save(f'{output_path}/AV_save.npy', AV_save)
 
     return
 
-global bif_counter  # used in bifurcation log
-bif_counter = 0
+def increment_saved_arrays(leaf):
+    global q_save, u_save, X_save, gNdot_save, gammaF_save, AV_save, corners_save
+    global bif_tracker
 
-def solve_bifurcation(iter_bif,*fixed_contact_region_params):
-    global q_save, u_save, X_save, gNdot_save, gammaF_save, AV_save
-    global leaves_counter
-    global iter
-    global bif_counter
-    bif_counter +=1
+    bif_tracker = np.vstack((bif_tracker,np.array([iter])))
 
-    global increment_leaves
-    increment_leaves = True # I think this is unneccessary
+    save_arrays()
 
-    # f.write(f'Running solve_bifurcations at iter_bif {iter_bif} and leaf {leaves_counter}\n') 
-    
-    # fixed_contact_regions = True
-    unique_contacts = fixed_contact_region_params[0]
+    # increment saved arrays
+    q_save_addition = np.tile(q_save[leaf,:,:],(1,1,1))
+    q_save = np.vstack((q_save,q_save_addition))
+    u_save_addition = np.tile(u_save[leaf,:,:],(1,1,1))
+    u_save = np.vstack((u_save,u_save_addition))
+    X_save_addition = np.tile(X_save[leaf,:,:],(1,1,1))
+    X_save = np.vstack((X_save,X_save_addition))
+    gNdot_save_addition = np.tile(gNdot_save[leaf,:,:],(1,1,1))
+    gNdot_save = np.vstack((gNdot_save,gNdot_save_addition))
+    gammaF_save_addition = np.tile(gammaF_save[leaf,:,:],(1,1,1))
+    gammaF_save = np.vstack((gammaF_save,gammaF_save_addition))
+    AV_save_addition = np.tile(AV_save[leaf,:,:],(1,1,1))
+    AV_save = np.vstack((AV_save,AV_save_addition))
+    corners_save_addition = np.tile(corners_save[leaf,:,:],(1,1,1))
+    corners_save = np.vstack((corners_save,corners_save_addition))
+
+
+def solve_new(leaf,iter_start):
+    global q_save, u_save, X_save, gNdot_save, gammaF_save, AV_save, corners_save
+    global rho_infinity_initial, rho_inf, MAXITERn, MAXITERn_initial
+    global iter, total_leaves
+
+    g.write(f"  solve_new(leaf = {leaf}, iter_start = {iter_start}) is currently running.\n")
+
+    iter = iter_start
+
+    while iter<ntime:
+        if not iter%100:
+            print(f"iteration {iter}")
+        # at this point, np.shape(q_save)[0] = total_leaves
+
+        current_time = time.time()
+        if current_time-start_time>(3600*max_hours):
+            f.write(f'\n  Program quit because max execution time {max_hours} hours was exceeded.\n')
+            raise MaxHoursAttained
+
+        current_total_leaves = total_leaves
+
+        while leaf < current_total_leaves:
+            if not iter%100:
+                print(f"leaf {leaf}")
+
+            prev_X = X_save[leaf,:,iter-1]
+            prev_AV = AV_save[leaf,:,iter-1]
+            prev_q = q_save[leaf,:,iter-1]
+            prev_u = u_save[leaf,:,iter-1]
+            prev_gNdot = gNdot_save[leaf,:,iter-1]
+            prev_gammaF = gammaF_save[leaf,:,iter-1]
+
+            try: 
+
+                X,AV,q,u,gNdot,gammaF = update(prev_X,prev_AV,prev_q,prev_u,prev_gNdot,prev_gammaF,leaf)
+
+                q_save[leaf,:,iter] = q
+                u_save[leaf,:,iter] = u
+                X_save[leaf,:,iter] = X
+                gNdot_save[leaf,:,iter] = gNdot
+                gammaF_save[leaf,:,iter] = gammaF
+                AV_save[leaf,:,iter] = AV
+
+                # update initial value
+                rho_infinity_initial = rho_inf 
+                # reset initial value
+                MAXITERn = MAXITERn_initial
+
+                # leaf will be zeroed out again
+                # the purpose of this line is to go outside the while leaf < total_leaves loop
+                leaf = leaf+1
+
+            except ValueError as e:
+                try: 
+                    solve_bifurcation(leaf,iter)
+                    leaf += 1
+                except NoBifurcationConvergence:
+                    try:
+                        update_rho_inf()
+                    except RhoInfInfiniteLoop:
+                        # we cannot update rho_inf anymore we need to abandon this leaf  
+                        # deleting leaf
+                        total_leaves-=1
+                        # decrement saved arrays
+                        q_save = np.delete(q_save,leaf,0)
+                        u_save = np.delete(u_save,leaf,0)
+                        X_save = np.delete(X_save,leaf,0)
+                        gNdot_save = np.delete(gNdot_save,leaf,0)
+                        gammaF_save = np.delete(gammaF_save,leaf,0)
+                        AV_save = np.delete(AV_save,leaf,0)
+                        current_total_leaves = total_leaves-1
+                        g.write(f"  Leaf {leaf} in iteration {iter} is now deleted. The total number of leaves becomes {total_leaves}.\n")
+                        solve_new(0,iter) # try starting at leaf, not at zero
+                        return
+
+            except Exception as e:
+                f.write(f"  The exception {e} is now raised at leaf {leaf} while calculating iteration {iter}.\n")
+                raise e
+            
+        iter = iter+1
+        leaf = 0
+
+        if iter%10 == 0:
+            save_arrays()
+
+
+    return
+
+
+def solve_bifurcation(leaf,iter):
+    global q_save, u_save, X_save, gNdot_save, gammaF_save, AV_save, corners_save
+    global MAXITERn
+    global total_leaves
+
+    prev_X = X_save[leaf,:,iter-1]
+    prev_AV = AV_save[leaf,:,iter-1]
+    prev_q = q_save[leaf,:,iter-1]
+    prev_u = u_save[leaf,:,iter-1]
+    prev_gNdot = gNdot_save[leaf,:,iter-1]
+    prev_gammaF = gammaF_save[leaf,:,iter-1]
+
+    unique_contacts,_ = update(prev_X,prev_AV,prev_q,prev_u,prev_gNdot,prev_gammaF,leaf)
+
     n_unique_contacts = np.shape(unique_contacts)[0]
-
-    # f.write(f'The number of unique contacts is {n_unique_contacts}\n')
-
-    nonconvergence_counter = 0
-
+    nonconvergence_counter = 0 # number of nonconverged branches out of unique_contacts
+    num_converged_leaves = 0
+    g.write(f"    A total number of {n_unique_contacts} unique contacts was detected while calculating leaf {leaf} at iteration {iter}.\n")
     for k in range(n_unique_contacts):
-        iter = iter_bif
-
-        print(f"k = {k}")
-        g.write("     |"*bif_counter)
-        g.write(f'__ {k+1} of {n_unique_contacts}  ')
-        
         try:
             fixed_contact  = unique_contacts[k,:]
-            X,AV,q,u,gNdot,gammaF = update(X_save[leaves_counter,:,iter_bif-1],AV_save[leaves_counter,:,iter_bif-1],
-                                       q_save[leaves_counter,:,iter_bif-1],u_save[leaves_counter,:,iter_bif-1],
-                                       gNdot_save[leaves_counter,:,iter_bif-1],gammaF_save[leaves_counter,:,iter_bif-1],
-                                       fixed_contact)
+            X,AV,q,u,gNdot,gammaF = update(prev_X,prev_AV,prev_q,prev_u,prev_gNdot,prev_gammaF,leaf,fixed_contact)
+            num_converged_leaves +=1
 
-            prev_X = X
-            prev_AV = AV
-            prev_q = q
-            prev_u = u
-            prev_gNdot = gNdot
-            prev_gammaF = gammaF
+            if num_converged_leaves > 1:
+                increment_saved_arrays(leaf)
+                leaf = total_leaves # we are now on a new leaf that is the last leaf
+                total_leaves+=1
+                g.write(f"  A new leaf {leaf} was created at iteration {iter} so the total number of leaves is now increased to {total_leaves}.\n")
 
-            q_save[leaves_counter,:,iter_bif] = prev_q
-            u_save[leaves_counter,:,iter_bif] = prev_u
-            X_save[leaves_counter,:,iter_bif] = prev_X
-            gNdot_save[leaves_counter,:,iter_bif] = prev_gNdot
-            gammaF_save[leaves_counter,:,iter_bif] = prev_gammaF
-            AV_save[leaves_counter,:,iter_bif] = AV
+            q_save[leaf,:,iter] = q
+            u_save[leaf,:,iter] = u
+            X_save[leaf,:,iter] = X
+            gNdot_save[leaf,:,iter] = gNdot
+            gammaF_save[leaf,:,iter] = gammaF
+            AV_save[leaf,:,iter] = AV
 
-            # f.write(f'{k}-th unique contact convergence successfull\n')            
+            if total_leaves > max_leaves:
+                break
 
-            solve(iter_bif+1)
-
-        except TypeError as e:       
-            # make a provision for if we always passed and never converged.
-            # f.write(f'{k}-th unique contact convergence unsuccessfull\n') 
-            g.write('unsuccessful\n')   
+        except TypeError as e:
+            print(f"Error {e} at iteration {iter} and leaf {leaf}.\n") # this error is raised because the leaf did not converge and update returned nothing      
             nonconvergence_counter = nonconvergence_counter+1
-            # f.write(f'nonconvergence_counter = {nonconvergence_counter}\n')
-            # num_bif_contacts[leaves_counter,3] = num_bif_contacts[leaves_counter,3]-1
             if nonconvergence_counter == n_unique_contacts:
                 # exception raised when None of the fixed contact regions converged
                 # raise Exception
-                global MAXITERn
                 nonconvergence_counter = 0
-                if MAXITERn < 10:  # INCOMPLETE, TO BE FIXED
+                if MAXITERn < 10:
                     # try to increase number of iterations
                     MAXITERn = 200
-                    solve_bifurcation(iter_bif,unique_contacts)
+                    solve_bifurcation(leaf,iter)
                 else:
-                    try:
-                        update_rho_inf()
-                        solve_bifurcation(iter_bif,unique_contacts)
-                    except:
-                        # we cannot update rho_inf anymore
-                        # we need to abandon this leaf  
-                        g.write(f'bifurcation convergence failed\n')
-                        pass
-                        raise Exception
-                # solve_bifurcation(iter_bif,unique_contacts) # maybe wrong, remove
-            else:
-                pass
+                    raise NoBifurcationConvergence
 
-    bif_counter = bif_counter-1
-    # increment_leaves = False
-
-    return 
+    return
 
 # initial normal force
 lambdaN0 = np.zeros(nN)
@@ -990,19 +989,22 @@ fixed_contact_regions = False   # COMMENT THIS AND SEE IF NECESSARY
 leaves_counter = 0
 # running the code!
 try:
-    f.write(f"nblocks = {n}, oscillation amplitude = {k}*{w[1]}, angular frequency = {ang_frq},\n")
+    f.write(f"######\nnblocks = {n}, oscillation amplitude = {k}*{w[1]}, angular frequency = {ang_frq},\n")
     f.write(f"number of oscillations = {n_oscillations}, number of iterations per oscillation = {iters_per_oscillation},\n")
     f.write(f"Period of oscillation: {oscillation_period} sec/cycle.\n")
     f.write(f"Total duration of simulation: {tf} sec.\n\n")
-    solve(1)
+    iter_start = 1
+    leaf_start = 0
+    total_leaves = 1
+    solve_new(leaf_start,iter_start)
     # removing last added leaf_counter
     leaves_counter = leaves_counter-1
     # f.write(f'leaves_counter decremented to {leaves_counter}\n')
     # removing the last added block to q_save
-    q_save = q_save[0:np.shape(q_save)[0]-1,:,:]
+    # q_save = q_save[0:np.shape(q_save)[0]-1,:,:]
     # f.write(f'q_save decremented to {np.shape(q_save)}\n')
 except: 
-    f.write(f"Failure at iteration {iter} while calculating leaf {leaves_counter} at bifurcation level {bif_counter}.\n")
+    f.write(f"Failure at iteration {iter} while calculating leaf {leaves_counter}.\n")
 finally:
     f.write(f"Number of converged leaves: {leaves_counter}\n")        
     end_time = time.time()
@@ -1015,14 +1017,6 @@ finally:
     f.close()
     g.close()
 
-    block0 = np.stack((xbb,h[0]/2*np.ones((ntime_init)),np.zeros((ntime_init))))
-    block0_tiled = np.tile(block0,(np.shape(q_save)[0],1,1))
-    q_save_total = np.concatenate((block0_tiled,q_save),axis=1)
-
-    
-    file_name = str(f'{output_path}/q.mat')
-    scipy.io.savemat(file_name,dict(q=q_save_total))
-    file_name_corners = str(f'{output_path}/corners.mat')
-    scipy.io.savemat(file_name_corners,dict(corners=corners_save))
+    save_arrays()
 
     print("Saved.")

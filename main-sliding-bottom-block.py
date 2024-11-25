@@ -28,7 +28,8 @@ n, eN, ntime, vX0, mu_val, output_path = parse_args()
 # ntime = 1200
 # vX0 = 10
 # mu_val = 0.2
-# output_path = "G:\\My Drive\\Research\\08-Stability of Stacked Objects\\Code-2024-02\\stacked-blocks-2d\\outputs"
+# output_path = os.path.join(os.getcwd(), "outputs/sliding-bottom-block")
+# os.makedirs(output_path, exist_ok=True)
 ############################
 
 # creating custom exceptions

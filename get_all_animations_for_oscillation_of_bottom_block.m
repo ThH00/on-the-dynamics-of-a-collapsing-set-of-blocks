@@ -1,5 +1,6 @@
 % Specify the folder containing the simulations.
-mainFolder = 
+currentFolder = pwd;
+mainFolder = [pwd,'/outputs/mutliple-solutions']
 
 runFunctionInSubfolders(mainFolder);
 
@@ -11,8 +12,10 @@ function [] = get_snap(q,time)
 ntime = size(q,2);          % number of time steps
 nblocks = size(q,1)/3;      % number of blocks
 
-w = 1.0*ones(nblocks,1);    % block width
+w = 0.2*ones(nblocks,1);    % block width
+w(1) = 1.0;
 h = 0.2*ones(nblocks,1);    % block height
+h(1) = 0.2;
 
 X1 = zeros(ntime,nblocks);
 X2 = zeros(ntime,nblocks);
@@ -62,8 +65,10 @@ function [] = get_animation(q,movie_name)
 ntime = size(q,2);          % number of time steps
 nblocks = size(q,1)/3;      % number of blocks
 
-w = 1.0*ones(nblocks,1);    % block width
+w = 0.2*ones(nblocks,1);    % block width
+w(1) = 1.0;
 h = 0.2*ones(nblocks,1);    % block height
+h(1) = 0.2;
 
 Dtime = 0.01;
 
@@ -129,9 +134,6 @@ function [] = get_bifurcation_analysis(fig_title)
 
     %% reshaping array
     n_bifurcations = size(q,1);
-    if n_bifurcations>100
-        n_bifurcations = 100;
-    end
     n_dof = size(q,2);
     n_time = size(q,3);
 
@@ -224,7 +226,7 @@ function runFunctionInSubfolders(mainFolder)
     for i = 1:numel(folders)
         subfolder = fullfile(mainFolder, folders(i).name);
         cd(subfolder); % Change current directory to the subfolder
-            fig_title = extractBetween(folders(i).name,"outputs","_mu");
+            fig_title = extractBetween(folders(i).name,"ang_freq","_mu");
             get_bifurcation_analysis(fig_title); % Run the function
     end
 end

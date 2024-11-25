@@ -1,2 +1,5 @@
 outputs
-inputs_oscillation_of_bottom_block.txt
+get_all_animations_general.m
+inputs-for-varying-frequency-experiments.m
+*.npy
+.DS_Store

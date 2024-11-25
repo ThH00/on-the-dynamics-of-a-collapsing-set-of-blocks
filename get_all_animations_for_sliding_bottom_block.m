@@ -1,5 +1,6 @@
 % Specify the folder containing the simulations.
-mainFolder = 
+currentFolder = pwd;
+mainFolder = [pwd,'/outputs/sliding-bottom-block*'] % COMPLETE FILE NAME WITH TIMESTAMP
 
 runFunctionInSubfolders(mainFolder);
 
@@ -11,9 +12,7 @@ ntime = size(q,2);          % number of time steps
 nblocks = size(q,1)/3;      % number of blocks
 
 w = 0.2*ones(nblocks,1);    % block width
-% w(1) = 1;
 h = 0.4*ones(nblocks,1);    % block height
-% h(1) = .2;
 
 X1 = zeros(ntime,nblocks);
 X2 = zeros(ntime,nblocks);
@@ -59,11 +58,7 @@ ntime = size(q,2);          % number of time steps
 nblocks = size(q,1)/3;      % number of blocks
 
 w = 0.2*ones(nblocks,1);    % block width
-% w(1) = 1;
 h = 0.4*ones(nblocks,1);    % block height
-% h(1) = .2;
-
-Dtime = 0.0626418390534633;
 
 X1 = zeros(ntime,nblocks);
 X2 = zeros(ntime,nblocks);
@@ -89,7 +84,7 @@ hold on
 set(gca,'XTick',[], 'YTick', [])
 for j = 1:50:ntime
 %     title(['t = ',num2str(j)* ])
-    text(3,5,num2str((j-1)*Dtime))
+    text(3,5,num2str((j-1)))
     axis([-4*max(w) 4*max(w) -max(h)/2 (nblocks+1)*max(h)])
     hold on
     for i = 1:nblocks
@@ -125,9 +120,6 @@ function [] = get_bifurcation_analysis(fig_title)
 
     %% reshaping array
     n_bifurcations = size(q,1);
-    if n_bifurcations>100
-        n_bifurcations = 100;
-    end
     n_dof = size(q,2);
     n_time = size(q,3);
 
@@ -151,11 +143,7 @@ function [] = get_bifurcation_analysis(fig_title)
     for i = 1:n_bifurcations
         title('$y$ coordinate of the CG of top block','Interpreter','latex')
         for j = n_dof-1
-            if abs(l(n_dof-2,end,i)-l(n_dof-5,end,i))>0.2
-                plot(l(j,:,i),'color','black')
-            else
-                plot(l(j,:,i),'color','black')
-            end
+            plot(l(j,:,i),'color','black')
         end
     end
     axis([1,size(l,2),l(n_dof-1,1,1)-0.2,l(n_dof-1,1,1)+0.2])
@@ -169,11 +157,7 @@ function [] = get_bifurcation_analysis(fig_title)
     for i = 1:n_bifurcations
         title('$\theta$ coordinate of the CG of top block','Interpreter','latex')
         for j = n_dof
-            if abs(l(n_dof-2,end,i)-l(n_dof-5,end,i))>0.2
-                plot(l(j,:,i),'color','black')
-            else
-                plot(l(j,:,i),'color','black')
-            end
+            plot(l(j,:,i),'color','black')
         end
     end
     saveas(gcf,[fig_title,'_theta','.png'])

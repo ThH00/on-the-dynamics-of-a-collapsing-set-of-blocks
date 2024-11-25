@@ -1,5 +1,6 @@
 % Specify the folder containing the simulations.
-mainFolder = 
+currentFolder = pwd;
+mainFolder = [pwd,'/outputs/lire-tower']
 
 runFunctionInSubfolders(mainFolder);
 
@@ -11,10 +12,8 @@ function [] = get_snap(q,time)
 ntime = size(q,2);          % number of time steps
 nblocks = size(q,1)/3;      % number of blocks
 
-w = 0.2*ones(nblocks,1);    % block width
-w(1) = 1;
-h = 0.4*ones(nblocks,1);    % block height
-h(1) = 0.2;
+w = 1.0*ones(nblocks,1);    % block width
+h = 0.2*ones(nblocks,1);    % block height
 
 X1 = zeros(ntime,nblocks);
 X2 = zeros(ntime,nblocks);
@@ -28,13 +27,13 @@ for j = 1:ntime
 end
 
 box on
-axis([-2*max(w) 2*max(w) -max(h)/2 (nblocks+1)*max(h)])
+axis([-max(w) max(w) -max(h)/2 (nblocks+1)*max(h)])
 axis equal
 xticks([])
 yticks([])
 hold on
 for j = time
-    axis([-2*max(w) 2*max(w) -max(h)/2 (nblocks+1)*max(h)])
+    axis([-max(w) max(w) -max(h)/2 (nblocks+1)*max(h)])
     hold on
     for i = 1:nblocks
         x1 = X1(j,i)-w(i)/2*cos(Theta(j,i))+h(i)/2*sin(Theta(j,i));
@@ -64,11 +63,8 @@ function [] = get_animation(q,movie_name)
 ntime = size(q,2);          % number of time steps
 nblocks = size(q,1)/3;      % number of blocks
 
-w = 0.2*ones(nblocks,1);    % block width
-w(1) = 1;
-h = 0.4*ones(nblocks,1);    % block height
-h(1) = 0.2;
-
+w = 1.0*ones(nblocks,1);    % block width
+h = 0.2*ones(nblocks,1);    % block height
 Dtime = 0.01;
 
 X1 = zeros(ntime,nblocks);
@@ -89,14 +85,14 @@ clf
 box off
 axis off
 % Y_max = max(X2(:,end))+1;
-axis([-2*max(w) 2*max(w) -max(h)/2 (nblocks+1)*max(h)])
+axis([-max(w) max(w) -max(h)/2 (nblocks+1)*max(h)])
 axis equal
 hold on
 % set(gca,'XTick',[], 'YTick', [])
 for j = 1:1:ntime
 %     title(['t = ',num2str(j)* ])
     text(3,5,num2str((j-1)*Dtime))
-    axis([-2*max(w) 2*max(w) -max(h)/2 (nblocks+1)*max(h)])
+    axis([-max(w) max(w) -max(h)/2 (nblocks+1)*max(h)])
     hold on
     for i = 1:nblocks
         x1 = X1(j,i)-w(i)/2*cos(Theta(j,i))+h(i)/2*sin(Theta(j,i));
@@ -222,5 +218,5 @@ end
 function runFunctionInSubfolders(mainFolder)
     % List all folders and subfolders
     cd(mainFolder); % Change current directory
-    get_bifurcation_analysis('fig'); % Run the function
+    get_bifurcation_analysis('lire_tower'); % Run the function
 end
